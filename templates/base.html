@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Seminar Management{% endblock %}</title>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        nav { background: #333; padding: 10px; }
+        nav a { color: white; margin-right: 15px; text-decoration: none; }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <a href="{% url 'course_list' %}">Courses</a>
+        {% if request.user.is_authenticated %}
+            <a href="{% url 'profile' %}">Profile</a>
+            <a href="{% url 'logout' %}">Logout</a>
+            {% if request.user.userprofile.is_moderator %}
+                <a href="{% url 'moderator_dashboard' %}">Moderator Dashboard</a>
+            {% endif %}
+        {% else %}
+            <a href="{% url 'login' %}">Login</a>
+            <a href="{% url 'register' %}">Register</a>
+        {% endif %}
+    </nav>
+
+    <div>
+        {% block content %}{% endblock %}
+    </div>
+
+    {% if messages %}
+        <script>
+            {% for message in messages %}
+                Swal.fire({
+                    title: "{% if message.tags == 'success' %}Success{% elif message.tags == 'error' %}Error{% else %}Info{% endif %}",
+                    text: "{{ message }}",
+                    icon: "{{ message.tags }}",
+                    confirmButtonText: "OK"
+                });
+            {% endfor %}
+        </script>
+    {% endif %}
+
+</body>
+</html>

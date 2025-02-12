@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Courses{% endblock %}
+
+{% block content %}
+<h2>Courses</h2>
+<a href="{% url 'course_create' %}">Add New Course</a>
+<ul>
+    {% for course in courses %}
+        <li>
+            {{ course.name }} - {{ course.date }} - {{ course.location }} 
+            <br>Trainer:
+            {% if course.trainer %}
+                {{ course.trainer.name }}
+            {% else %}
+                Not Assigned
+            {% endif %}
+            <br><a href="{% url 'course_edit' course.id %}">Edit</a>
+        </li>
+    {% endfor %}
+</ul>
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Moderator Dashboard{% endblock %}
+
+{% block content %}
+<h2>Moderator Dashboard</h2>
+<a href="{% url 'add_training_subject' %}">Add Training Subject</a>
+
+<h3>All Users</h3>
+<ul>
+    {% for user in users %}
+        <li>
+            {{ user.name }} 
+            {% if user.is_moderator %}
+                (Moderator)
+            {% else %}
+                <a href="{% url 'assign_training_subject' user.id %}">Assign Training Subjects</a>
+            {% endif %}
+        </li>
+    {% endfor %}
+</ul>
+
+<h3>Training Subjects</h3>
+<ul>
+    {% for subject in subjects %}
+        <li>{{ subject.name }}</li>
+    {% endfor %}
+</ul>
+{% endblock %}
