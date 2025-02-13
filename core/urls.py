@@ -22,12 +22,14 @@ from django.shortcuts import redirect
 
 def home_redirect(request):
     if request.user.is_authenticated:
-        return redirect("profile")  # If logged in, go to profile
+        if request.user.userprofile.is_moderator:
+            return redirect("moderator_dashboard")
+        return redirect("profile")
     return redirect("login")
 
 
 urlpatterns = [
-    path("", home_redirect, name="home"),  # New root URL redirect
+    path("", home_redirect, name="home"),
     path("admin/", admin.site.urls),
     path("users/", include("user.urls")),
     path("services/", include("services.urls")),

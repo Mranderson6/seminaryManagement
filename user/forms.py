@@ -6,22 +6,24 @@ from .models import UserProfile, TrainingSubject
 
 # 1. User Registration Form
 class UserRegistrationForm(UserCreationForm):
-    email = forms.EmailField(required=True)
-    name = forms.CharField(max_length=255)
-    location = forms.CharField(max_length=100)
+    email = forms.EmailField(required=True, widget=forms.EmailInput(attrs={'class': 'form-control'}))
+    name = forms.CharField(max_length=255, widget=forms.TextInput(attrs={'class': 'form-control', 'id': 'user-name'}))
+    location = forms.CharField(max_length=100,widget=forms.TextInput(attrs={'class': 'form-control', 'id': 'user-location'}))
+
 
     class Meta:
-        model = User
-        fields = ["username", "email", "name", "location", "password1", "password2"]
+            model = User
+            fields = ["username", "email", "name", "location", "password1", "password2"]
 
     def save(self, commit=True):
         user = super().save(commit=False)
         user.email = self.cleaned_data["email"]
         if commit:
             user.save()
-            # Check if a UserProfile already exists
-            profile, created = UserProfile.objects.get_or_create(
-                user=user, defaults={"name": self.cleaned_data["name"], "location": self.cleaned_data["location"], "email": user.email}
+            # Create UserProfile automatically
+            UserProfile.objects.get_or_create(
+                user=user, defaults={"name": self.cleaned_data["name"], "location": self.cleaned_data["location"],
+                                     "email": user.email}
             )
         return user
 
@@ -45,6 +47,10 @@ class UserProfileForm(forms.ModelForm):
 
 # 4. Form to Add a Training Subject
 class TrainingSubjectForm(forms.ModelForm):
+    name = forms.CharField(
+        widget=forms.TextInput(attrs={'class': 'form-control'}), required=True
+    )
+
     class Meta:
         model = TrainingSubject
         fields = ["name"]

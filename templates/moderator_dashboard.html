@@ -1,28 +1,341 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Moderator Dashboard{% endblock %}
 
 {% block content %}
-<h2>Moderator Dashboard</h2>
-<a href="{% url 'add_training_subject' %}">Add Training Subject</a>
 
-<h3>All Users</h3>
-<ul>
-    {% for user in users %}
-        <li>
-            {{ user.name }} 
-            {% if user.is_moderator %}
-                (Moderator)
-            {% else %}
-                <a href="{% url 'assign_training_subject' user.id %}">Assign Training Subjects</a>
-            {% endif %}
-        </li>
-    {% endfor %}
-</ul>
+<style>
+  .trainer-affiliated {
+    color: red;
+    font-weight: bold;
+}
 
-<h3>Training Subjects</h3>
-<ul>
-    {% for subject in subjects %}
-        <li>{{ subject.name }}</li>
-    {% endfor %}
-</ul>
+.trainer-available {
+    color: green;
+    font-weight: bold;
+}
+
+.trainer-not-recommended {
+    color: orange;
+    font-style: italic;
+}
+
+</style>
+
+<div class="container mt-4">
+    <h2 class="text-center mb-4">Moderator Dashboard</h2>
+
+    <div class="row">
+        <!-- Trainers (Larger Section) -->
+        <div class="col-md-8">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center bg-primary text-white">
+                    <h5 class="mb-0">Trainers</h5>
+                    <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#addTrainerModal">Add</button>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                        <table class="table table-hover table-bordered">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Training Subjects</th>
+                                    <th>Affiliation</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for trainer in trainers %}
+                                    <tr>
+                                        <td>{{ trainer.name }}</td>
+                                        <td>{{ trainer.email }}</td>
+                                        <td>
+                                            {% if trainer.training_subjects.all %}
+                                                <ul>
+                                                    {% for subject in trainer.training_subjects.all %}
+                                                        <li>{{ subject.name }}</li>
+                                                    {% endfor %}
+                                                </ul>
+                                            {% else %}
+                                                <span class="text-muted">No subjects assigned</span>
+                                            {% endif %}
+                                            <button class="btn btn-primary btn-sm mt-2" data-bs-toggle="modal" data-bs-target="#assignSubjectModal-{{ trainer.id }}">
+                                                Assign Subjects
+                                            </button>
+                                        </td>
+                                        <td>
+                                            {% if trainer.is_affiliated %}
+                                                <span class="badge bg-success">Affiliated</span>
+                                            {% else %}
+                                                <span class="badge bg-danger">Not Affiliated</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if trainer.user.is_active %}
+                                                <form method="POST" action="{% url 'toggle_user_status' trainer.user.id %}">
+                                                    {% csrf_token %}
+                                                    <button type="submit" class="btn btn-danger btn-sm">Deactivate</button>
+                                                </form>
+                                            {% else %}
+                                                <form method="POST" action="{% url 'toggle_user_status' trainer.user.id %}">
+                                                    {% csrf_token %}
+                                                    <button type="submit" class="btn btn-success btn-sm">Activate</button>
+                                                </form>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% empty %}
+                                    <tr>
+                                        <td colspan="5" class="text-center">No trainers available.</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Courses (Smaller Section) -->
+        <div class="col-md-4">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center bg-success text-white">
+                    <h5 class="mb-0">Courses</h5>
+                    <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#addCourseModal">Add</button>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                        <table class="table table-hover table-bordered">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Trainer</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for course in courses %}
+                                    <tr>
+                                        <td>{{ course.name }}</td>
+                                        <td>
+                                            {% if course.trainer %}
+                                                {{ course.trainer.name }}
+                                            {% else %}
+                                                Not Assigned
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ course.date }}</td>
+                                    </tr>
+                                {% empty %}
+                                    <tr>
+                                        <td colspan="3" class="text-center">No courses available.</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Training Subjects (Full Width Below) -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center bg-warning text-dark">
+                    <h5 class="mb-0">Training Subjects</h5>
+                    <button class="btn btn-dark btn-sm" data-bs-toggle="modal" data-bs-target="#addSubjectModal">Add</button>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+                        <table class="table table-hover table-bordered">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Name</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for subject in subjects %}
+                                    <tr>
+                                        <td>{{ subject.name }}</td>
+                                    </tr>
+                                {% empty %}
+                                    <tr>
+                                        <td class="text-center">No training subjects available.</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+{% for trainer in trainers %}
+<!-- Assign Subjects Modal -->
+<div class="modal fade" id="assignSubjectModal-{{ trainer.id }}" tabindex="-1" aria-labelledby="assignSubjectLabel-{{ trainer.id }}" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="assignSubjectLabel-{{ trainer.id }}">Assign Training Subjects to {{ trainer.name }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{% url 'assign_training_subject' trainer.id %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <label class="form-label">Select Training Subjects</label>
+                    <select name="training_subjects" class="form-select" multiple>
+                        {% for subject in subjects %}
+                            <option value="{{ subject.id }}" {% if subject in trainer.training_subjects.all %}selected{% endif %}>
+                                {{ subject.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                    <small class="text-muted">Hold CTRL (Windows) or CMD (Mac) to select multiple subjects.</small>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary">Assign</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+
+<!-- Trainer Modal -->
+<div class="modal fade" id="addTrainerModal" tabindex="-1" aria-labelledby="addTrainerLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addTrainerLabel">Add Trainer</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{% url 'register_trainer' %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    {{ trainer_form.as_p }}
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Course Modal -->
+<div class="modal fade" id="addCourseModal" tabindex="-1" aria-labelledby="addCourseLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addCourseLabel">Add Course</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="courseForm" method="POST" action="{% url 'course_create' %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="container-fluid">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Course Name</label>
+                                    {{ course_form.name }}
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Date</label>
+                                    <input type="date" name="date" class="form-control" id="course-date">
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Location</label>
+                                    {{ course_form.location }}
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Participants</label>
+                                    {{ course_form.participants }}
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Subject</label>
+                                    <select id="course-subject" name="subject" class="form-control">
+                                        <option value="">-- Select Subject --</option>
+                                        {% for subject in subjects %}
+                                            <option value="{{ subject.id }}">{{ subject.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Price</label>
+                                    {{ course_form.price }}
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Trainer Price</label>
+                                    {{ course_form.trainer_price }}
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Trainer</label>
+                                    <select id="course-trainer" name="trainer" class="form-select trainer-dropdown">
+                                        <option value="">-- Select Trainer --</option>
+                                    </select>
+                                    <small id="trainer-warning" class="text-danger"></small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="mb-3">
+                                    <label class="form-label">Notes</label>
+                                    {{ course_form.notes }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary">Save Course</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+
+<!-- Training Subject Modal -->
+<div class="modal fade" id="addSubjectModal" tabindex="-1" aria-labelledby="addSubjectLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addSubjectLabel">Add Training Subject</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{% url 'add_training_subject' %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Subject Name</label>
+                        {{ subject_form.name }}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+
+<script src="{% static 'js/course_form.js' %}"></script>
+
 {% endblock %}
