@@ -73,8 +73,6 @@ Log in with your credentials and start managing the platform efficiently.
 
 ---
 
-### Push to Git
-To commit and push this `README.md` file to your repository, use the following commands:
 
 
 
