@@ -78,7 +78,7 @@ def login_view(request):
             if user:
                 login(request, user)
                 messages.success(request, "Login successful!")
-                return redirect("profile")
+                return redirect("moderator_dashboard" if is_moderator(user) else "profile")
             else:
                 messages.error(request, "Invalid username or password. Please try again.")
         else:
