@@ -27,64 +27,59 @@ def is_moderator(user):
 @user_passes_test(is_moderator)
 def course_create(request, course_id=None):
     """
-    Creates or edits a course via AJAX:
-      - Prevents assigning the same trainer to two courses on the same day.
-      - Checks schedule conflicts and suggests another trainer.
-      - Ensures the trainer is qualified for the subject but allows assignment with a warning if not recommended.
-      - Updates 'is_affiliated' status dynamically.
+    Creates or edits a course:
+      - Prevents assigning the same trainer to multiple courses on the same day.
+      - Ensures the trainer is qualified for the subject.
+      - Warns if a trainer has a low match percentage.
+      - Suggests another trainer if the selected one is unavailable.
+      - Updates 'is_affiliated' dynamically when a course is assigned or removed.
       - Sends success/error/conflict JSON for SweetAlert.
     """
     course = None
+    previous_trainer = None
+
     if course_id:
         course = get_object_or_404(Course, id=course_id)
-        previous_trainer = course.trainer  # Store previous trainer for reference
-    else:
-        previous_trainer = None
+        previous_trainer = course.trainer  # Store the existing trainer before updates
 
     if request.method == "POST":
         form = CourseForm(request.POST, instance=course)
         if form.is_valid():
-            selected_trainer = form.cleaned_data.get("trainer")  # UserProfile instance
-            selected_subject = form.cleaned_data.get("subject")  # TrainingSubject instance
-            course_date = form.cleaned_data.get("date")
+            selected_trainer = form.cleaned_data.get("trainer")  # Selected trainer
+            selected_subject = form.cleaned_data.get("subject")  # Selected subject
+            course_date = form.cleaned_data.get("date")  # Selected date
 
             # 1) Prevent assigning a trainer to multiple courses on the same date
-            if selected_trainer and Course.objects.filter(trainer=selected_trainer, date=course_date).exists():
+            if selected_trainer and Course.objects.filter(trainer=selected_trainer, date=course_date).exclude(id=course_id).exists():
                 return JsonResponse({
                     "status": "error",
-                    "message": f"Trainer {selected_trainer.name} is already scheduled for another course on {course_date}. Please select a different date or trainer."
+                    "message": f"Trainer {selected_trainer.name} is already scheduled for another course on {course_date}. Choose another trainer."
                 })
 
             # 2) Ensure the trainer is qualified for the subject
+            warning_message = ""
             if selected_trainer and selected_subject not in selected_trainer.training_subjects.all():
-                warning_message = f"Warning: Trainer {selected_trainer.name} is not qualified for the subject '{selected_subject.name}'."
+                warning_message = f"⚠️ Warning: Trainer {selected_trainer.name} is not fully qualified for '{selected_subject.name}'."
 
             # 3) Calculate the match percentage
             match_percentage = form.get_match_percentage(selected_trainer, selected_subject)
 
-            # 4) If the match percentage is low, show a warning
+            # 4) If the match percentage is below 50%, show a warning
             if match_percentage < 50:
-                warning_message = warning_message if 'warning_message' in locals() else ''
-                warning_message += f" Trainer {selected_trainer.name} has a low match of {match_percentage}% for this subject. Proceeding is not recommended."
+                warning_message += f" Trainer {selected_trainer.name} has a low match of {match_percentage}%. This selection is **not recommended**."
 
-            # 5) Check for scheduling conflicts (e.g., trainer already booked)
+            # 5) Check for scheduling conflicts
             if selected_trainer and has_schedule_conflict(selected_trainer, course_date):
                 suggested = suggest_best_trainer(selected_subject, course_date)
                 if suggested:
                     return JsonResponse({
                         "status": "conflict",
-                        "message": (
-                            f"Trainer {selected_trainer.name} is already booked on {course_date}. "
-                            f"Suggested Trainer: {suggested.name}."
-                        )
+                        "message": f"Trainer {selected_trainer.name} is already booked on {course_date}. Suggested Trainer: {suggested.name}."
                     })
                 else:
                     return JsonResponse({
                         "status": "conflict",
-                        "message": (
-                            f"No available trainer for {selected_subject.name} on {course_date}. "
-                            "Course not created."
-                        )
+                        "message": f"No available trainer for {selected_subject.name} on {course_date}. Please choose a different date or trainer."
                     })
 
             # 6) Save the course and update trainer affiliation status
@@ -92,30 +87,31 @@ def course_create(request, course_id=None):
             course.trainer = selected_trainer
             course.save()
 
-            # 7) Update trainer's affiliation status
+            # 7) Update trainer's `is_affiliated` status
             if selected_trainer:
-                selected_trainer.is_affiliated = True  # Since they are assigned to a course
+                selected_trainer.is_affiliated = True  # Trainer is now assigned to a course
                 selected_trainer.save()
 
-            # If a previous trainer was replaced, update their status
+            # 8) If previous trainer was replaced, update their affiliation status
             if previous_trainer and previous_trainer != selected_trainer:
                 if not Course.objects.filter(trainer=previous_trainer).exists():
                     previous_trainer.is_affiliated = False
                     previous_trainer.save()
 
-            # 8) Send email notification to the assigned trainer
+            # 9) Send an email notification to the assigned trainer
             if course.trainer:
-                subject = f"You have been assigned to a new course: {course.name}"
+                subject = f"🚀 Assigned to a New Course: {course.name}"
                 message = (
                     f"Hello {course.trainer.name},\n\n"
-                    f"You have been assigned as the trainer for the course \"{course.name}\" on {course.date}.\n\n"
-                    f"Course Details:\n"
-                    f"- Subject: {course.subject.name}\n"
-                    f"- Location: {course.location}\n"
-                    f"- Participants: {course.participants}\n"
-                    f"- Notes: {course.notes}\n\n"
-                    f"Please prepare accordingly.\n\n"
-                    f"Best Regards,\nSeminar Management Team\n"
+                    f"You have been assigned as the trainer for **'{course.name}'** on **{course.date}**.\n\n"
+                    f"📌 Course Details:\n"
+                    f"- **Subject**: {course.subject.name}\n"
+                    f"- **Location**: {course.location}\n"
+                    f"- **Participants**: {course.participants}\n"
+                    f"- **Notes**: {course.notes if course.notes else 'None'}\n\n"
+                    f"📢 Please prepare accordingly.\n\n"
+                    f"Best Regards,\n"
+                    f"Seminar Management Team"
                 )
                 send_mail(
                     subject,
@@ -125,17 +121,17 @@ def course_create(request, course_id=None):
                     fail_silently=False
                 )
 
-            # Return success response, including any warning if applicable
+            # Return success response, including any warnings
             response_data = {
                 "status": "success",
-                "message": f"Course '{course.name}' has been created/updated successfully!"
+                "message": f"✅ Course '{course.name}' has been successfully {'created' if not course_id else 'updated'}!"
             }
             if warning_message:
-                response_data["warning"] = warning_message  # Send warning if applicable
+                response_data["warning"] = warning_message  # Include warning message if applicable
 
             return JsonResponse(response_data)
         else:
-            # Extract and format form errors
+            # Handle form errors
             error_messages = []
             for field, errors in form.errors.items():
                 for error in errors:
@@ -147,6 +143,7 @@ def course_create(request, course_id=None):
             })
 
     return render(request, "course_form.html", {"form": CourseForm(instance=course)})
+
 
 
 @require_GET
@@ -196,3 +193,25 @@ def get_match_percentage(trainer, subject):
         return 0
 
     return int((1 / total_subjects) * 100)
+
+@login_required
+@user_passes_test(is_moderator)
+def delete_course(request, course_id):
+    """
+    Deletes a course and updates the trainer's affiliation status.
+    """
+    course = get_object_or_404(Course, id=course_id)
+    trainer = course.trainer  # Store trainer before deleting course
+
+    if request.method == "POST":
+        course.delete()
+
+        # If the trainer has no more assigned courses, update affiliation status
+        if trainer and not Course.objects.filter(trainer=trainer).exists():
+            trainer.is_affiliated = False
+            trainer.save()
+
+        messages.success(request, "Course deleted successfully!")
+        return redirect("moderator_dashboard")
+
+    return JsonResponse({"error": "Invalid request method"}, status=400)
